@@ -46,7 +46,7 @@ export const Stacks = () => {
                 title: 'Success',
                 text: 'Template uploaded, update stack in process...'
               });
-            // console.log(res);
+            console.log(res);
             // const filePath = res;
             // console.log(`File uploaded! ${filePath}`);
         } catch (err) {
