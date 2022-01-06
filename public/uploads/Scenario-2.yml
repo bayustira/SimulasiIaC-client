@@ -1,0 +1,315 @@
+---
+AWSTemplateFormatVersion: 2010-09-09
+Description: Create public & private subnets with each route tables, NAT Gateway in AZ B
+Parameters:
+  Scenario1StackName:
+    Description: Name of VPC stack
+    Type: String
+    Default: Scenario-1
+
+  AvailabilityZoneName2:
+    Description: "2nd Availability Zone "
+    Type: AWS::EC2::AvailabilityZone::Name
+    Default: ap-southeast-1b
+
+  PublicSubnet2CIDR:
+    Description: CIDR of the public subnet in AZ2
+    Type: String
+    Default: 10.100.10.0/24
+
+  PrivateSubnet2CIDR:
+    Description: CIDR of the private subnet in AZ2
+    Type: String
+    Default: 10.100.11.0/24
+
+Resources:
+  MyNATGateway2:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId:
+        Fn::GetAtt:
+          - MyEIP2
+          - AllocationId
+      SubnetId:
+        Ref: myPublicSubnet2
+      Tags:
+        - Key: Name
+          Value: Scenario-2-NAT-Gateway
+
+  MyEIP2:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: VPC
+      Tags:
+        - Key: Name
+          Value: Scenario-2-EIP
+
+  myPublicRouteTable2:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:
+        Fn::ImportValue:
+          Fn::Sub: "${Scenario1StackName}-VPCID"
+      Tags:
+        - Key: Name
+          Value: Scenario-2-Public-RT
+        - Key: Application
+          Value: AWS::StackName
+
+  myPrivateRouteTable2:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId:
+        Fn::ImportValue:
+          Fn::Sub: "${Scenario1StackName}-VPCID"
+      Tags:
+        - Key: Name
+          Value: Scenario-2-Private-RT
+        - Key: Application
+          Value: AWS::StackName
+
+  myPublicRoute2:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId:
+        Ref: myPublicRouteTable2
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId:
+        Fn::ImportValue:
+          Fn::Sub: "${Scenario1StackName}-IGWID"
+
+  myPrivateRoute2:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId:
+        Ref: myPrivateRouteTable2
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId:
+        Ref: MyNATGateway2
+
+  myPublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Fn::ImportValue:
+          Fn::Sub: "${Scenario1StackName}-VPCID"
+      AvailabilityZone:
+        Ref: AvailabilityZoneName2
+      CidrBlock:
+        Ref: PublicSubnet2CIDR
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: Scenario-2-Public-Subnet
+        - Key: Application
+          Value: AWS::StackName
+
+  myPrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId:
+        Fn::ImportValue:
+          Fn::Sub: "${Scenario1StackName}-VPCID"
+      AvailabilityZone:
+        Ref: AvailabilityZoneName2
+      CidrBlock:
+        Ref: PrivateSubnet2CIDR
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: Scenario-2-Private-Subnet
+        - Key: Application
+          Value: AWS::StackName
+
+  myPublicSubnetRouteTableAssociation2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: myPublicSubnet2
+      RouteTableId:
+        Ref: myPublicRouteTable2
+
+  myPrivateSubnetRouteTableAssociation2:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId:
+        Ref: myPrivateSubnet2
+      RouteTableId:
+        Ref: myPrivateRouteTable2
+
+  myPublicNACL2:
+    Type: AWS::EC2::NetworkAcl
+    Properties:
+      Tags:
+        - Key: Name
+          Value: Scenario-2-Public-NACL
+      VpcId:
+        Fn::ImportValue:
+          Fn::Sub: "${Scenario1StackName}-VPCID"
+
+  myPublicNACLInboundRule2:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      CidrBlock: 0.0.0.0/0
+      Egress: false
+      NetworkAclId:
+        Ref: myPublicNACL2
+      PortRange:
+        From: 0
+        To: 65535
+      Protocol: 6
+      RuleAction: allow
+      RuleNumber: 100
+
+  myPublicNACLOutboundRule2:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      CidrBlock: 0.0.0.0/0
+      Egress: true
+      NetworkAclId:
+        Ref: myPublicNACL2
+      PortRange:
+        From: 0
+        To: 65535
+      Protocol: 6
+      RuleAction: allow
+      RuleNumber: 100
+
+  publicSubnetNetworkACLAssociation2:
+    Type: AWS::EC2::SubnetNetworkAclAssociation
+    Properties:
+      NetworkAclId:
+        Ref: myPublicNACL2
+      SubnetId:
+        Ref: myPublicSubnet2
+
+  myPrivateNACL2:
+    Type: AWS::EC2::NetworkAcl
+    Properties:
+      Tags:
+        - Key: Name
+          Value: Scenario-2-Private-NACL
+      VpcId:
+        Fn::ImportValue:
+          Fn::Sub: "${Scenario1StackName}-VPCID"
+
+  myPrivateNACLInboundRule1:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      CidrBlock: 0.0.0.0/0
+      Egress: false
+      NetworkAclId:
+        Ref: myPrivateNACL2
+      PortRange:
+        From: 0
+        To: 65535
+      Protocol: 6
+      RuleAction: allow
+      RuleNumber: 100
+
+  myPrivateNACLInboundRule2:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      CidrBlock: 0.0.0.0/0
+      Egress: false
+      NetworkAclId:
+        Ref: myPrivateNACL2
+      Icmp:
+        Code: -1
+        Type: -1
+      Protocol: 1
+      RuleAction: allow
+      RuleNumber: 101
+
+  myPrivateNACLOutboundRule1:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      CidrBlock: 0.0.0.0/0
+      Egress: true
+      NetworkAclId:
+        Ref: myPrivateNACL2
+      PortRange:
+        From: 0
+        To: 65535
+      Protocol: 6
+      RuleAction: allow
+      RuleNumber: 100
+
+  myPrivateNACLOutboundRule2:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      CidrBlock: 0.0.0.0/0
+      Egress: true
+      NetworkAclId:
+        Ref: myPrivateNACL2
+      Icmp:
+        Code: -1
+        Type: -1
+      Protocol: 1
+      RuleAction: allow
+      RuleNumber: 101
+
+  privateSubnetNetworkACLAssociation:
+    Type: AWS::EC2::SubnetNetworkAclAssociation
+    Properties:
+      NetworkAclId:
+        Ref: myPrivateNACL2
+      SubnetId:
+        Ref: myPrivateSubnet2
+
+Outputs:
+  PublicRT2Id:
+    Description: Public Route Table 2 ID
+    Value:
+      Ref: myPublicRouteTable2
+    Export:
+      Name:
+        Fn::Sub: "${AWS::StackName}-PublicRT2ID"
+
+  PrivateRT2Id:
+    Description: Private Route Table 2 ID
+    Value:
+      Ref: myPrivateRouteTable2
+    Export:
+      Name:
+        Fn::Sub: "${AWS::StackName}-PrivateRT2ID"
+
+  PublicSubnet2Id:
+    Description: Public Subnet 2 ID
+    Value:
+      Ref: myPublicSubnet2
+    Export:
+      Name:
+        Fn::Sub: "${AWS::StackName}-PublicSubnet2ID"
+
+  PrivateSubnet2Id:
+    Description: Private Subnet 2 ID
+    Value:
+      Ref: myPrivateSubnet2
+    Export:
+      Name:
+        Fn::Sub: "${AWS::StackName}-PrivateSubnet2ID"
+
+  NATGateway2Id:
+    Description: NAT Gateway 2 ID
+    Value:
+      Ref: MyNATGateway2
+    Export:
+      Name:
+        Fn::Sub: "${AWS::StackName}-NATGateway2ID"
+
+  PublicNACL2Id:
+    Description: Public Network ACL 2 ID
+    Value:
+      Ref: myPublicNACL2
+    Export:
+      Name:
+        Fn::Sub: "${AWS::StackName}-PublicNACL2ID"
+
+  PrivateNACL2Id:
+    Description: Private Network ACL 2 ID
+    Value:
+      Ref: myPrivateNACL2
+    Export:
+      Name:
+        Fn::Sub: "${AWS::StackName}-PrivateNACL2ID"

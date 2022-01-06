@@ -1,0 +1,245 @@
+---
+AWSTemplateFormatVersion: 2010-09-09
+Description: Sample template to provision an Application Load Balancer & Auto Scaling Group.
+Mappings:
+  AmiMap:
+    ServerType01:
+      id: ami-041e608a24bf24ce5 #ec2 ami with simple web application
+
+Parameters:
+  Scenario1StackName:
+    Description: Name of VPC stack
+    Type: String
+    Default: Scenario-1
+
+  Scenario2StackName:
+    Description: Name of subnets stack
+    Type: String
+    Default: Scenario-2
+
+  KeyPairName:
+    Description: EC2 KeyPair to enable SSH access to the instance
+    Type: AWS::EC2::KeyPair::KeyName
+    Default: KeypairTest
+
+  InstanceType:
+    Description: EC2 instance type
+    Type: String
+    Default: t2.micro
+
+Resources:
+  ELBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable http & https
+      GroupName: Scenario-2-ELB-SG
+      VpcId:
+        Fn::ImportValue:
+          Fn::Sub: "${Scenario1StackName}-VPCID"
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: Scenario-2-ELB-SG
+        - Key: Application
+          Value:
+            Ref: AWS::StackName
+
+  ApplicationLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: Scenario-2-ELB
+      Scheme: internet-facing
+      SecurityGroups:
+        - Ref: ELBSecurityGroup
+      Subnets:
+        - Fn::ImportValue:
+            Fn::Sub: "${Scenario1StackName}-PublicSubnetID"
+        - Fn::ImportValue:
+            Fn::Sub: "${Scenario2StackName}-PublicSubnet2ID"
+      Tags:
+        - Key: Name
+          Value: Scenario-2-ELB
+      Type: application
+
+  ALBListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn:
+            Ref: ALBTargetGroup
+      LoadBalancerArn:
+        Ref: ApplicationLoadBalancer
+      Port: "80"
+      Protocol: HTTP
+
+  ALBTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckEnabled: true
+      HealthCheckIntervalSeconds: 30
+      HealthCheckPath: "/"
+      HealthCheckPort: traffic-port
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 5
+      HealthyThresholdCount: 5
+      Name: Scenario-2-Target-Group
+      Port: 80
+      Protocol: HTTP
+      UnhealthyThresholdCount: 2
+      VpcId:
+        Fn::ImportValue:
+          Fn::Sub: "${Scenario1StackName}-VPCID"
+      TargetType: instance
+      Tags:
+        - Key: Name
+          Value: Scenario-2-Target-Group
+
+  AutoScalingSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Enable ssh, http, https, icmp
+      GroupName: Scenario-2-ASG-SG
+      VpcId:
+        Fn::ImportValue:
+          Fn::Sub: "${Scenario1StackName}-VPCID"
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 10.100.0.0/16
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 10.100.0.0/16
+        - IpProtocol: icmp
+          FromPort: 8
+          ToPort: -1
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: Scenario-2-ASG-SG
+        - Key: Application
+          Value:
+            Ref: AWS::StackName
+
+  LaunchConfiguration:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties:
+      AssociatePublicIpAddress: false
+      BlockDeviceMappings:
+        - DeviceName: "/dev/sda1"
+          Ebs:
+            SnapshotId: snap-0a1b9a122b1c00dec
+      ImageId:
+        Fn::FindInMap:
+          - AmiMap
+          - ServerType01
+          - id
+      InstanceType:
+        Ref: InstanceType
+      KeyName:
+        Ref: KeyPairName
+      LaunchConfigurationName: Scenario-2-Launch-Configuration
+      SecurityGroups:
+        - Ref: AutoScalingSecurityGroup
+
+  AutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AutoScalingGroupName: Scenario-2-ASG
+      AvailabilityZones:
+        - ap-southeast-1a
+        - ap-southeast-1b
+      HealthCheckGracePeriod: 300
+      HealthCheckType: ELB
+      LaunchConfigurationName:
+        Ref: LaunchConfiguration
+      MaxSize: "8"
+      MetricsCollection:
+        - Granularity: 1Minute
+      MinSize: "2"
+      Tags:
+        - Key: Name
+          PropagateAtLaunch: true
+          Value: Scenario-2-ASG
+      TargetGroupARNs:
+        - Ref: ALBTargetGroup
+      VPCZoneIdentifier:
+        - Fn::ImportValue:
+            Fn::Sub: "${Scenario1StackName}-PrivateSubnetID"
+        - Fn::ImportValue:
+            Fn::Sub: "${Scenario2StackName}-PrivateSubnet2ID"
+
+  CPUAutoScalingPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AutoScalingGroupName:
+        Ref: AutoScalingGroup
+      EstimatedInstanceWarmup: 300
+      PolicyType: TargetTrackingScaling
+      TargetTrackingConfiguration:
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ASGAverageCPUUtilization
+        TargetValue: 40
+
+Outputs:
+  AplicationLoadBalancer:
+    Description: Scenario 2 ELB Output
+    Value:
+      Ref: ApplicationLoadBalancer
+    Export:
+      Name:
+        Fn::Sub: "${AWS::StackName}-ELBID"
+
+  ALBSecurityGroup:
+    Description: Scenario 2 Elastic Load Balancer Security Group Output
+    Value:
+      Ref: ELBSecurityGroup
+    Export:
+      Name:
+        Fn::Sub: "${AWS::StackName}-ELBSGID"
+
+  ALBTargetGroup:
+    Description: Scenario 2 Target Group Output
+    Value:
+      Ref: ALBTargetGroup
+    Export:
+      Name:
+        Fn::Sub: "${AWS::StackName}-TargetGroupID"
+
+  ASGSecurityGroup:
+    Description: Scenario 2 Auto Scaling SG Output
+    Value:
+      Ref: AutoScalingSecurityGroup
+    Export:
+      Name:
+        Fn::Sub: "${AWS::StackName}-ASGSGID"
+
+  LaunchConfiguration:
+    Description: Scenario 2 Launch Configuration Output
+    Value:
+      Ref: LaunchConfiguration
+    Export:
+      Name:
+        Fn::Sub: "${AWS::StackName}-LaunchConfigurationID"
+
+  AutoScalingGroup:
+    Description: Scenario 2 Auto Scaling Group Output
+    Value:
+      Ref: AutoScalingGroup
+    Export:
+      Name:
+        Fn::Sub: "${AWS::StackName}-ASGID"

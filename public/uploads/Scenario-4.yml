@@ -1,0 +1,109 @@
+---
+AWSTemplateFormatVersion: 2010-09-09
+Description: Sample template to provision an Client VPN for private subnet in AZ A & B
+Parameters:
+  Scenario1StackName:
+    Description: Name of Scenario 2-D-1 stack
+    Type: String
+    Default: Scenario-1
+
+  Scenario2StackName:
+    Description: Name of Scenario 2-D-2 stack
+    Type: String
+    Default: Scenario-2
+
+  VPCCIDR:
+    Description: CIDR of the VPC
+    Type: String
+    Default: 10.100.0.0/16
+
+  ClientCIDR:
+    Description: CIDR of the client VPN
+    Type: String
+    Default: 10.5.0.0/20
+
+Resources:
+  ClientVPNAuthorizationRule:
+    Type: AWS::EC2::ClientVpnAuthorizationRule
+    Properties:
+      AuthorizeAllGroups: true
+      ClientVpnEndpointId:
+        Ref: ClientVPNEndpoint
+      Description: Authorization rule for clients to access internet
+      TargetNetworkCidr: 0.0.0.0/0
+
+  ClientVPNEndpoint:
+    Type: AWS::EC2::ClientVpnEndpoint
+    Properties:
+      AuthenticationOptions:
+        - MutualAuthentication:
+            ClientRootCertificateChainArn: arn:aws:acm:ap-southeast-1:491244520525:certificate/79cb7403-42b3-40b1-80d4-26cbcd555cba
+          Type: certificate-authentication
+      ClientCidrBlock:
+        Ref: ClientCIDR
+      ConnectionLogOptions:
+        Enabled: false
+      Description: Scenario 2 Client VPN Endpoint
+      SelfServicePortal: disabled
+      ServerCertificateArn: arn:aws:acm:ap-southeast-1:491244520525:certificate/55566112-aa66-4e21-9364-47bac050e1d0
+      TagSpecifications:
+        - ResourceType: client-vpn-endpoint
+          Tags:
+            - Key: Name
+              Value: Scenario-2-Client-VPN-Endpoint
+      TransportProtocol: udp
+      VpcId:
+        Fn::ImportValue:
+          Fn::Sub: "${Scenario1StackName}-VPCID"
+      VpnPort: 443
+
+  ClientVPNRoute1:
+    Type: AWS::EC2::ClientVpnRoute
+    Properties:
+      ClientVpnEndpointId:
+        Ref: ClientVPNEndpoint
+      Description: Route for private subnet AZ A
+      DestinationCidrBlock: 0.0.0.0/0
+      TargetVpcSubnetId:
+        Fn::ImportValue:
+          Fn::Sub: "${Scenario1StackName}-PrivateSubnetID"
+    DependsOn: ClientVPNTargetNetworkAssociation1
+
+  ClientVPNRoute2:
+    Type: AWS::EC2::ClientVpnRoute
+    Properties:
+      ClientVpnEndpointId:
+        Ref: ClientVPNEndpoint
+      Description: Route for private subnet AZ B
+      DestinationCidrBlock: 0.0.0.0/0
+      TargetVpcSubnetId:
+        Fn::ImportValue:
+          Fn::Sub: "${Scenario2StackName}-PrivateSubnet2ID"
+    DependsOn: ClientVPNTargetNetworkAssociation2
+
+  ClientVPNTargetNetworkAssociation1:
+    Type: AWS::EC2::ClientVpnTargetNetworkAssociation
+    Properties:
+      ClientVpnEndpointId:
+        Ref: ClientVPNEndpoint
+      SubnetId:
+        Fn::ImportValue:
+          Fn::Sub: "${Scenario1StackName}-PrivateSubnetID"
+
+  ClientVPNTargetNetworkAssociation2:
+    Type: AWS::EC2::ClientVpnTargetNetworkAssociation
+    Properties:
+      ClientVpnEndpointId:
+        Ref: ClientVPNEndpoint
+      SubnetId:
+        Fn::ImportValue:
+          Fn::Sub: "${Scenario2StackName}-PrivateSubnet2ID"
+
+Outputs:
+  ClientVPNEndpoint:
+    Description: Scenario 2 Client VPN Endpoint ID
+    Value:
+      Ref: ClientVPNEndpoint
+    Export:
+      Name:
+        Fn::Sub: "${AWS::StackName}-ClientVPNEndpointID"
