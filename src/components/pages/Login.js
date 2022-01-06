@@ -53,7 +53,7 @@ export const Login = () => {
                             <div className="card-body">
                             <p className="card-text">Hanya dengan script, anda dapat membangun infrastruktur server sesuai kebutuhan anda</p>
                             {/* <Link to="https://login-iac.auth.ap-southeast-1.amazoncognito.com/login?client_id=4omij3pn3iksj75f8ac14p6la9&response_type=code&scope=aws.cognito.signin.user.admin+email+openid+phone+profile&redirect_uri=http://localhost:3000/home" className="btn btn-primary">Login</Link> */}
-                            <a href="https://login-iac.auth.ap-southeast-1.amazoncognito.com/login?client_id=4omij3pn3iksj75f8ac14p6la9&response_type=code&scope=aws.cognito.signin.user.admin+email+openid+phone+profile&redirect_uri=http://localhost:3000/home" className="btn btn-primary">Login</a>
+                            <a href="https://login-iac.auth.ap-southeast-1.amazoncognito.com/login?client_id=4omij3pn3iksj75f8ac14p6la9&response_type=code&scope=aws.cognito.signin.user.admin+email+openid+phone+profile&redirect_uri=https://quizzical-brown-5cc36a.netlify.app/home" className="btn btn-primary">Login</a>
                             </div>
                         </div>
                         </div>
